@@ -1,5 +1,5 @@
 ---
-title: "R Notebook"
+title: "Fastai Movielens Lesson with R and Reticulate"
 output: html_notebook
 editor_options: 
   chunk_output_type: console
