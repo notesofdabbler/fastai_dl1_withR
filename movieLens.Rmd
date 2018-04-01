@@ -1,0 +1,152 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+This notebook is an attempt to work through the MovieLens python notebook covered in the Fastai Deep Learning for Coders (Part 1) course by Jeremy Howard using R and Reticulate package. This content is covered in the following 2 video lectures in the course (lecture 5, lecture 6)
+
+```{r}
+# import R libraries
+library(reticulate)
+library(ggplot2)
+library(dplyr)
+
+```
+
+```{r}
+
+use_python("/home/paperspace/anaconda3/envs/fastai/bin/python", required = TRUE)
+use_condaenv("fastai")
+py_config()
+
+main = import_main()
+bi = import_builtins()
+```
+
+```{r}
+# get relevant python imports
+fstai_learner = import_from_path("fastai.learner", "../../fastai")
+fstai_coldata = import_from_path("fastai.column_data", "../../fastai")
+```
+
+```{r}
+py_run_string("
+from fastai.learner import *
+from fastai.column_data import *
+              ")
+```
+
+```{r}
+datapath = "../../data/ml-latest-small/"
+
+ratings = read.csv(paste0(datapath, "ratings.csv"), stringsAsFactors = FALSE)
+head(ratings)
+
+movies = read.csv(paste0(datapath, "movies.csv"), stringsAsFactors = FALSE)
+head(movies)
+```
+
+```{r}
+val_idxs = py$get_cv_idxs(nrow(ratings))
+val_idxs = as.integer(val_idxs)
+wd = 2e-4
+n_factors = 50L
+```
+
+```{r}
+cf = py$CollabFilterDataset$from_csv(datapath, 'ratings.csv', 'userId', 'movieId', 'rating')
+learn = cf$get_learner(n_factors, val_idxs, 64L, opt_fn=py$optim$Adam)
+```
+
+```{r}
+learn$model
+```
+
+```{r}
+learn$fit(1e-2, 2L, wds=wd, cycle_len=1L, cycle_mult=2L)
+```
+
+```{r}
+yval_preds = learn$predict()
+yval=learn$data$val_y
+```
+
+```{r}
+dfplt = data.frame(yval = yval, yval_preds = yval_preds)
+ggplot(dfplt) + geom_histogram(aes(x = yval_preds)) + facet_grid(yval ~ .) + 
+   xlab("predicted ratings") + theme_bw()
+```
+
+```{r}
+movie2idx = cf$item2idx
+movie2idx = unlist(movie2idx)
+head(movie2idx)
+```
+
+```{r}
+idx2movie = as.numeric(names(movie2idx))
+names(idx2movie) = movie2idx
+head(idx2movie)
+```
+
+```{r}
+topmovies = ratings %>% group_by(movieId) %>% summarize(cnt = n()) %>% arrange(desc(cnt)) %>% slice(1:3000)
+topmoviesidx = movie2idx[as.character(topmovies$movieId)]
+topmoviesidx = np_array(topmoviesidx)
+```
+
+```{r}
+m = learn$model
+movie_bias = py$to_np(m$ib(py$V(topmoviesidx)))
+movie_bias[1:20]
+```
+
+```{r}
+topmovies$movie_bias = movie_bias[,1]
+topmovies = left_join(topmovies, movies %>% select(movieId, title), by = "movieId")
+```
+
+```{r}
+topmovies %>% arrange(movie_bias) %>% slice(1:15)
+```
+
+```{r}
+topmovies %>% arrange(desc(movie_bias)) %>% slice(1:15)
+```
+
+```{r}
+movie_emb = py$to_np(m$i(py$V(topmoviesidx)))
+dim(movie_emb)
+```
+
+```{r}
+pcamdl = prcomp(movie_emb)
+loadings_df = data.frame(pcamdl$rotation)
+scores_df = data.frame(pcamdl$x)
+```
+
+```{r}
+scores_df$movieidx = py_to_r(topmoviesidx)
+scores_df$movieId = idx2movie[as.character(scores_df$movieidx)]
+scores_df = inner_join(scores_df, movies %>% select(movieId, title), by = "movieId")
+```
+
+```{r}
+scores_df %>% arrange(PC1) %>% slice(1:10) %>% select(title)
+scores_df %>% arrange(desc(PC1)) %>% slice(1:10) %>% select(title)
+```
+
+```{r}
+scores_df %>% arrange(PC2) %>% slice(1:10) %>% select(title)
+scores_df %>% arrange(desc(PC2)) %>% slice(1:10) %>% select(title)
+```
+
+```{r}
+set.seed(12345)
+scores_df_samp = scores_df %>% sample_n(50)
+ggplot(scores_df_samp) + geom_point(aes(x = PC1, y = PC2)) + 
+    geom_text(aes(x = PC1, y = PC2, label = title), size = 2.5, hjust = 0, nudge_x = 0.02) +
+     theme_bw()
+```
