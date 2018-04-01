@@ -1,11 +1,17 @@
 ---
-title: "Fastai Movielens Lesson with R and Reticulate"
+title: "Fastai Collaborative Filtering with R and Reticulate"
 output: html_notebook
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
-This notebook is an attempt to work through the MovieLens python notebook covered in the Fastai Deep Learning for Coders (Part 1) course by Jeremy Howard using R and Reticulate package. This content is covered in the following 2 video lectures in the course (lecture 5, lecture 6)
+Jeremy Howard teaches the [Fastai Deep Learning for Coders (Part 1)](http://course.fast.ai/). In this course, he has a lesson on Collaborative Filtering where he uses MovieLens dataset to demonstrate models for predicting ratings of movies. This content is covered in videos of [lecture 5](http://course.fast.ai/lessons/lesson5.html) and [lecture 6](http://course.fast.ai/lessons/lesson6.html). 
+
+This notebook is an attempt to create a R version (using Reticulate package) of the MovieLens python [notebook](https://github.com/fastai/fastai/blob/master/courses/dl1/lesson5-movielens.ipynb) covered in the  course.  While we can have separate python and R chunks with interoperability using Reticulate, I have tried to do everything in R since it will be easier to use this as standalone R script also. This course uses a library fastai (written by Jeremy) which is a wrapper around PyTorch. 
+
+It will be helpful to listen to the lectures before going through this notebook since the concepts of the model and approach are discussed in the lecture.
+
+## Inital Setup
 
 ```{r}
 # import R libraries
@@ -14,6 +20,10 @@ library(ggplot2)
 library(dplyr)
 
 ```
+
+In this course, they talk about several cloud GPU options and provided a conda environment fastai in those environments. I am using the Paperspace setup that is covered in [Lesson 1](http://course.fast.ai/lessons/lesson1.html). Reshama Shaik has also listed detailed upto date [instructions](https://github.com/reshamas/fastai_deeplearn_part1/blob/master/tools/paperspace.md) on getting set up in Paperspace. 
+
+Since the machine already comes with fastai conda environment, we first need to use the python that is part of the fastai environment and also use the fastai conda environment.
 
 ```{r}
 
@@ -25,11 +35,15 @@ main = import_main()
 bi = import_builtins()
 ```
 
+The fastai library is located in the folder ~/fastai. So first, we import fastai.learner and fastai.columndata (libraries used in the notebook) from the folder.
+
 ```{r}
 # get relevant python imports
 fstai_learner = import_from_path("fastai.learner", "../../fastai")
 fstai_coldata = import_from_path("fastai.column_data", "../../fastai")
 ```
+
+These modules import several other modules. So the import command used in the python notebook is directly called below so that all the other modules are also available for use later.
 
 ```{r}
 py_run_string("
@@ -37,6 +51,10 @@ from fastai.learner import *
 from fastai.column_data import *
               ")
 ```
+
+## Get Data
+
+The ratings dataset has the ratings for different users and movies. The movies dataset has the movie title information.
 
 ```{r}
 datapath = "../../data/ml-latest-small/"
@@ -48,25 +66,70 @@ movies = read.csv(paste0(datapath, "movies.csv"), stringsAsFactors = FALSE)
 head(movies)
 ```
 
+## Model
+
+Each user is $i$ represent by an embedding vector $u_i$ consisting of `n_factor` values and a user bias value $ub_i$. Similarly a movie $j$ is represented by an embedding vector $m_j$ consisting of `n_factor` values and movie bias value $mb_j$. The model of rating $r_{ij}$ given by user $i$ to movie $j$ is:
+$$ r_{ij} = u_i^Tv_j + b_i + m_j $$
+
+## Model Fitting
+
+First, the set of user/movie combinations that would be used as validation set is determined. Then, the following parameters are set:
+
+* weight decay (wd)
+* Number of factors in embedding `n_factors`
+
+For few of the code snippets below, I have included the python code in comments to show the correspondence between python code and R code with reticulate. In most cases, I just had to do one of the following things to get things to work:
+
+* Replace period in python code with dollar
+* If it is a python variable or function, prefix a `py$`
+* Explicitly convert an R object into python object when passing to a function using `r_to_py` if needed.
+* If a python function requires an integer as argument, then I ensured that an integer is passed as an argument (for example, passing `2L` instead of `2`)
+
 ```{r}
+# python code
+# val_idxs = get_cv_idxs(len(ratings))
+#
 val_idxs = py$get_cv_idxs(nrow(ratings))
 val_idxs = as.integer(val_idxs)
 wd = 2e-4
 n_factors = 50L
 ```
 
+Next a data loder object `cf` and a learner object `learn` is created
 ```{r}
+# python code
+# cf = CollabFilterDataset.from_csv(path, 'ratings.csv', 'userId', 'movieId', 'rating')
+#
 cf = py$CollabFilterDataset$from_csv(datapath, 'ratings.csv', 'userId', 'movieId', 'rating')
+
+# python code
+# learn = cf.get_learner(n_factors, val_idxs, 64, opt_fn=optim.Adam)
+#
 learn = cf$get_learner(n_factors, val_idxs, 64L, opt_fn=py$optim$Adam)
 ```
 
+We review the model
 ```{r}
 learn$model
 ```
 
-```{r}
+The model has the following components:
+
+* The vector of `n_factors = 50` for each of `n_users = 671` is represented by a `n_users x n_factors` embedding matrix `u`.
+* The vector of `n_factors = 50` for each of `n_movies = 9066` is represented by a `n_movies x n_factors` embedding matrix `i`.
+* Users have a bias vector `ub` of length `n_users = 671` and movies have a bias vector $ib$ of length `n_movies = 9066`. 
+
+Next we fit the model
+```{r message=FALSE}
+# python code
+# learn.fit(1e-2, 2, wds=wd, cycle_len=1, cycle_mult=2)
+#
 learn$fit(1e-2, 2L, wds=wd, cycle_len=1L, cycle_mult=2L)
 ```
+
+For some reason, the epoch is not printing fully (but it is calculated) in the notebook in RStudio. But the html output is very verbose. For now, I am not showing it in output.
+
+Next we compare the predicted and actual ratings for the validation set
 
 ```{r}
 yval_preds = learn$predict()
@@ -79,6 +142,8 @@ ggplot(dfplt) + geom_histogram(aes(x = yval_preds)) + facet_grid(yval ~ .) +
    xlab("predicted ratings") + theme_bw()
 ```
 
+## Interpretation of Movie Bias
+The model uses a sequential numeric id for users and movies, we first get the movie to id mapping from the data object `cf`. 
 ```{r}
 movie2idx = cf$item2idx
 movie2idx = unlist(movie2idx)
@@ -91,13 +156,19 @@ names(idx2movie) = movie2idx
 head(idx2movie)
 ```
 
+Get the top 3000 movies that got the most ratings
 ```{r}
 topmovies = ratings %>% group_by(movieId) %>% summarize(cnt = n()) %>% arrange(desc(cnt)) %>% slice(1:3000)
 topmoviesidx = movie2idx[as.character(topmovies$movieId)]
 topmoviesidx = np_array(topmoviesidx)
 ```
 
+Get the movie bias variable for the top 3000 movies
 ```{r}
+# python code
+# m=learn.model
+# movie_bias = to_np(m.ib(V(topMovieIdx)))
+#
 m = learn$model
 movie_bias = py$to_np(m$ib(py$V(topmoviesidx)))
 movie_bias[1:20]
@@ -108,20 +179,36 @@ topmovies$movie_bias = movie_bias[,1]
 topmovies = left_join(topmovies, movies %>% select(movieId, title), by = "movieId")
 ```
 
+Find the lowest rated movies (lowest values of movie bias)
 ```{r}
 topmovies %>% arrange(movie_bias) %>% slice(1:15)
 ```
 
+Find the highest rated movies (highest values of movie bias)
 ```{r}
-topmovies %>% arrange(desc(movie_bias)) %>% slice(1:15)
+topmovies %>% arrange(desc(movie_bias)) %>% select(title) %>% slice(1:15)
 ```
 
+## Interpretation of Embeddings
+
+Get the embeddings of movies
 ```{r}
+# python code
+# movie_emb = to_np(m.i(V(topMovieIdx)))
+#
 movie_emb = py$to_np(m$i(py$V(topmoviesidx)))
 dim(movie_emb)
 ```
 
 ```{r}
+save(movie_emb, file = "movie_emb.Rda")
+rm(movie_emb)
+```
+
+Since there are 50 dimensions, a PCA is done to examine the first two dimensions. For some reason, using `movie_emb` directly crashes R. So I save it, delete it and reload it and that seems to work.
+
+```{r}
+load("movie_emb.Rda")
 pcamdl = prcomp(movie_emb)
 loadings_df = data.frame(pcamdl$rotation)
 scores_df = data.frame(pcamdl$x)
@@ -133,15 +220,19 @@ scores_df$movieId = idx2movie[as.character(scores_df$movieidx)]
 scores_df = inner_join(scores_df, movies %>% select(movieId, title), by = "movieId")
 ```
 
+Check the movies that have highest and lowest scores for PC1.
 ```{r}
 scores_df %>% arrange(PC1) %>% slice(1:10) %>% select(title)
 scores_df %>% arrange(desc(PC1)) %>% slice(1:10) %>% select(title)
 ```
 
+Check the movies that have highest and lowest scores for PC2.
 ```{r}
 scores_df %>% arrange(PC2) %>% slice(1:10) %>% select(title)
 scores_df %>% arrange(desc(PC2)) %>% slice(1:10) %>% select(title)
 ```
+
+The above results could be used to assign some sort of meaning to the first 2 principal components. Next a scatter plot of PC1 vs PC2 with labels of movies is shown. This could be used to check which movies cluster together.
 
 ```{r}
 set.seed(12345)
@@ -149,4 +240,8 @@ scores_df_samp = scores_df %>% sample_n(50)
 ggplot(scores_df_samp) + geom_point(aes(x = PC1, y = PC2)) + 
     geom_text(aes(x = PC1, y = PC2, label = title), size = 2.5, hjust = 0, nudge_x = 0.02) +
      theme_bw()
+```
+
+```{r}
+sessionInfo()
 ```
