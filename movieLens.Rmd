@@ -95,7 +95,7 @@ wd = 2e-4
 n_factors = 50L
 ```
 
-Next a data loder object `cf` and a learner object `learn` is created
+Next a data loader object `cf` and a learner object `learn` is created
 ```{r}
 # python code
 # cf = CollabFilterDataset.from_csv(path, 'ratings.csv', 'userId', 'movieId', 'rating')
@@ -117,7 +117,7 @@ The model has the following components:
 
 * The vector of `n_factors = 50` for each of `n_users = 671` is represented by a `n_users x n_factors` embedding matrix `u`.
 * The vector of `n_factors = 50` for each of `n_movies = 9066` is represented by a `n_movies x n_factors` embedding matrix `i`.
-* Users have a bias vector `ub` of length `n_users = 671` and movies have a bias vector $ib$ of length `n_movies = 9066`. 
+* Users have a bias vector `ub` of length `n_users = 671` and movies have a bias vector `ib` of length `n_movies = 9066`. 
 
 Next we fit the model
 ```{r results="hide"}
