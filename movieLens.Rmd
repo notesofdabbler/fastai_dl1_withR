@@ -5,13 +5,13 @@ editor_options:
   chunk_output_type: inline
 ---
 
-Jeremy Howard teaches the [Fastai Deep Learning for Coders (Part 1)](http://course.fast.ai/). In this course, he has a lesson on Collaborative Filtering where he uses MovieLens dataset to demonstrate models for predicting ratings of movies. This content is covered in videos of [lecture 5](http://course.fast.ai/lessons/lesson5.html) and [lecture 6](http://course.fast.ai/lessons/lesson6.html). 
+Jeremy Howard recently taught the [Fastai Deep Learning for Coders (Part 1)](http://course.fast.ai/) course. This course has a lesson on Collaborative Filtering where he uses MovieLens dataset to demonstrate models for predicting ratings of movies. This content is covered in videos of [lecture 5](http://course.fast.ai/lessons/lesson5.html) and [lecture 6](http://course.fast.ai/lessons/lesson6.html). 
 
 This notebook is an attempt to create a R version (using Reticulate package) of the MovieLens python [notebook](https://github.com/fastai/fastai/blob/master/courses/dl1/lesson5-movielens.ipynb) covered in the  course.  While we can have separate python and R chunks with interoperability using Reticulate, I have tried to do everything in R since it will be easier to use this as standalone R script also. This course uses a library fastai (written by Jeremy) which is a wrapper around PyTorch. 
 
-It will be helpful to listen to the lectures before going through this notebook since the concepts of the model and approach are discussed in the lecture.
+It will be helpful to listen to the lectures before going through this notebook since the concepts of the model and approach are discussed in the lecture and this notebook is just a replication attempt of the material from the course using R.
 
-## Inital Setup
+## Initial Setup
 
 ```{r}
 # import R libraries
@@ -21,7 +21,7 @@ library(dplyr)
 
 ```
 
-In this course, they talk about several cloud GPU options and provided a conda environment fastai in those environments. I am using the Paperspace setup that is covered in [Lesson 1](http://course.fast.ai/lessons/lesson1.html). Reshama Shaik has also listed detailed upto date [instructions](https://github.com/reshamas/fastai_deeplearn_part1/blob/master/tools/paperspace.md) on getting set up in Paperspace. 
+In this course, they talk about several cloud GPU options and provided a conda environment fastai in those environments. I am using the Paperspace setup that is covered in [Lesson 1](http://course.fast.ai/lessons/lesson1.html). Reshama Shaik has also listed detailed upto date [instructions](https://github.com/reshamas/fastai_deeplearn_part1/blob/master/tools/paperspace.md) on getting set up in Paperspace. For setting up RStudio server in the same machine, I followed Cloud GPU [setup section](https://tensorflow.rstudio.com/tools/cloud_gpu.html) in TensorFlow for R site (except for the EC2 part).
 
 Since the machine already comes with fastai conda environment, we first need to use the python that is part of the fastai environment and also use the fastai conda environment.
 
@@ -124,10 +124,14 @@ Next we fit the model
 # python code
 # learn.fit(1e-2, 2, wds=wd, cycle_len=1, cycle_mult=2)
 #
-learn$fit(1e-2, 2L, wds=wd, cycle_len=1L, cycle_mult=2L)
+mdlfit = learn$fit(1e-2, 2L, wds=wd, cycle_len=1L, cycle_mult=2L)
 ```
 
-For some reason, the epoch is not printing fully (but it is calculated) in the notebook in RStudio. But the html output is very verbose. For now, I am not showing it in output.
+In Jupyter notebook, a widget shows a nice output of progress. That output doesn't render properly within RStudio and the html generated document has too much output. For now, I have turned off output and am just storing the final validation loss metric (MSE loss in this case)
+
+```{r}
+paste0("MSE of validation set = ", round(mdlfit[[1]], 3))
+```
 
 Next we compare the predicted and actual ratings for the validation set
 
@@ -241,6 +245,10 @@ ggplot(scores_df_samp) + geom_point(aes(x = PC1, y = PC2)) +
     geom_text(aes(x = PC1, y = PC2, label = title), size = 2.5, hjust = 0, nudge_x = 0.02) +
      theme_bw()
 ```
+
+## Summary
+
+Reticulate package is a great addition to R. Working through this example showed that it is not too hard to develop a R version of the analysis in python thanks to reticulate.
 
 ```{r}
 sessionInfo()

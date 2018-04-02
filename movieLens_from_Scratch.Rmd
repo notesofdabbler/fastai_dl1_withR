@@ -1,11 +1,15 @@
 ---
-title: "Fastai Movielens Lesson (from Scratch) with R and Reticulate"
+title: "Fastai Collaborative Filtering (from Scratch) with R and Reticulate"
 output: html_notebook
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
-This notebook is an attempt to work through the MovieLens python notebook covered in the Fastai Deep Learning for Coders (Part 1) course by Jeremy Howard using R and Reticulate package. This content is covered in the following 2 video lectures in the course (lecture 5, lecture 6)
+We had created a [R notebook](https://notesofdabbler.github.io/fastai_dl1_withR/movieLens.nb.html) version of the first portion of movielens [python notebook](https://github.com/fastai/fastai/blob/master/courses/dl1/lesson5-movielens.ipynb) from the [Fastai Deep Learning for Coders (Part 1)](http://course.fast.ai/) where high level fastai functions were used to build and fit the model. This notebook tries to create the R version of the second portion of the movielens python notebook where Jeremy creates the collaborative filtering model form scratch. 
+
+This content is covered in videos of [lecture 5](http://course.fast.ai/lessons/lesson5.html) and [lecture 6](http://course.fast.ai/lessons/lesson6.html). It will be helpful to listen to the lectures before going through this notebook since the concepts of the model and approach are discussed in the lecture and this notebook is just a replication attempt of the material from the course using R.
+
+## Initial Setup
 
 ```{r}
 # import R libraries
@@ -14,6 +18,8 @@ library(ggplot2)
 library(dplyr)
 
 ```
+
+Notes about python setup and machine used are covered in this [R notebook](https://notesofdabbler.github.io/fastai_dl1_withR/movieLens.nb.html).
 
 ```{r}
 
@@ -38,6 +44,10 @@ from fastai.column_data import *
               ")
 ```
 
+## Get Data
+
+The ratings dataset has the ratings for different users and movies. The movies dataset has the movie title information.
+
 ```{r}
 datapath = "../../data/ml-latest-small/"
 
@@ -48,6 +58,7 @@ movies = read.csv(paste0(datapath, "movies.csv"), stringsAsFactors = FALSE)
 head(movies)
 ```
 
+## Working with PyTorch Tensors
 ```{r}
 Amat = matrix(c(1.0, 2.0, 3.0, 4.0), byrow = TRUE, ncol = 2)
 Bmat = matrix(c(2.0, 2.0, 10.0, 10.0), byrow = TRUE, ncol = 2)
@@ -58,23 +69,28 @@ a
 b = py$T(Bmat)
 b
 ```
-
+In python when we use `a*b`, it works fine but won't work when calling from R since R doesn't know how to use `*` operator with Torch tensors. So here I have used the pyTorch `mul` function for multiplication
 ```{r}
 a$mul(b)
 a$mul(b)$sum(1L) # note the use of 1L instead of 1 to ensure that we are passing integer
 ```
 
+In PyTorch, we need to define a model as a Python class that inherits from ``nn.Module``. It has a specific method `forward` which gives the recipe for computing the prediction given inputs. For example, if the prediction `r` is a dot product of input vectors `u` and `m`, then it would defined in the following class.
 ```{r}
 py_run_string("
 class DotProduct(nn.Module):
     def forward(self, u, m): return (u*m).sum(1)              
               ")
 ```
-
+A model can then be defined as the instance of the class and calling the forward method with inputs with give the prediction.
 ```{r}
 model = main$DotProduct()
 model$forward(a, b)
 ```
+
+## Data Preparation for Use in PyTorch Model
+
+The ratings dataset has userId and movieId fields. But for passing to pyTorch, we create a sequential index for both.
 
 ```{r}
 u_unique = unique(ratings$userId)
@@ -94,8 +110,15 @@ ratings$movieIdx = movie2idx[as.character(ratings$movieId)]
 
 n_users = length(u_unique)
 n_movies = length(m_unique)
+
+n_users; n_movies
 ```
 
+## Model 1
+
+Each user is $i$ represent by an embedding vector $u_i$ consisting of `n_factor` values. Similarly a movie $j$ is represented by an embedding vector $m_j$ consisting of `n_factor` values. The model of rating $r_{ij}$ given by user $i$ to movie $j$ is:
+$$ r_{ij} = u_i^Tv_j$$
+The class below defines the model. The constructor for class passes other inputs and initializes model parameters. 
 ```{r}
 py_run_string("
 class EmbeddingDot(nn.Module):
@@ -113,36 +136,58 @@ class EmbeddingDot(nn.Module):
               ")
 ```
 
+The x dataframe just includes the sequential user id and movie id. y is a numpy array of ratings with type float32.
 ```{r}
 x = ratings[, c("userIdx", "movieIdx")]
 y = np_array(ratings$rating)$astype(py$np$float32)
 ```
 
+The list of validation data rows are selected and `n_factors` is set to 50.
 ```{r}
 val_idxs = py$get_cv_idxs(nrow(ratings))
 val_idxs = as.integer(val_idxs)
 n_factors = 50L
 ```
 
+The data loader object is created
 ```{r}
 data = py$ColumnarModelData$from_data_frame(datapath, val_idxs, r_to_py(x), y, c("userIdx", "movieIdx"), 64L)
 ```
-
+Model is defined using the defined class `EmbeddingDot`. Based on the model, the optimizer `opt` is defined.
 ```{r}
 wd=1e-5
 model = py$EmbeddingDot(n_users, n_movies, n_factors)$cuda()
 opt = py$optim$SGD(model$parameters(), 1e-1, weight_decay=wd, momentum=0.9)
 ```
 
+Model is fit. In Jupyter notebook, a widget shows a nice output of progress. That output doesn't render properly within RStudio and the html generated document has too much output. For now, I have turned off output and am just storing the final validation loss metric (MSE loss in this case)
+```{r results="hide"}
+mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
+```
 ```{r}
-py$fit(model, data, 3L, opt, py$F$mse_loss)
+paste0("MSE of validation set = ", round(mdlfit[[1]], 3))
 ```
 
-```{r}
+Model run for some more epochs
+```{r results="hide"}
 py$set_lrs(opt, 0.01)
-py$fit(model, data, 3L, opt, py$F$mse_loss)
+mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
+```
+```{r}
+paste0("MSE of validation set = ", round(mdlfit[[1]], 3))
 ```
 
+Alternate way to check validation MSE is to explicitly get predictions from model for validation data and compare to validation data
+```{r}
+yval_preds = py$predict(model, data$val_dl)
+yval=data$val_y[,1]
+mse_loss = mean((yval_preds - yval)**2)
+mse_loss
+```
+
+## Model 2
+This is model 1 with added bias term for users and movies. Each user is $i$ represent by an embedding vector $u_i$ consisting of `n_factor` values and a user bias value $ub_i$. Similarly a movie $j$ is represented by an embedding vector $m_j$ consisting of `n_factor` values and movie bias value $mb_j$. In addtion, the output is contrained to be between minimum rating `r_min` and maximum rating `r_max` using a sigmoid function. The model of rating $r_{ij}$ given by user $i$ to movie $j$ is:
+$$ r_{ij} = \frac{e^{u_i^Tv_j + b_i + m_j}}{e^{u_i^Tv_j + b_i + m_j} + 1}(r_{max} - r_{min}) + r_{min} $$
 ```{r}
 py_run_string("
 def get_emb(ni,nf):
@@ -168,6 +213,7 @@ class EmbeddingDotBias(nn.Module):
               ")
 ```
 
+The model object `opt` is defined and fit
 ```{r}
 wd=2e-4
 min_rating = min(ratings$rating)
@@ -176,14 +222,32 @@ model = py$EmbeddingDotBias(n_users, n_movies, n_factors, min_rating, max_rating
 opt = py$optim$SGD(model$parameters(), 1e-1, weight_decay=wd, momentum=0.9)
 ```
 
+```{r results = "hide"}
+mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
+```
 ```{r}
-py$fit(model, data, 3L, opt, py$F$mse_loss)
+paste0("MSE of validation set = ", round(mdlfit[[1]], 3))
+```
+Change the learning rate and refit
+```{r results = "hide"}
+py$set_lrs(opt, 0.01)
+mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
+```
+```{r}
+paste0("MSE of validation set = ", round(mdlfit[[1]], 3))
 ```
 
-```{r}
-py$set_lrs(opt, 0.01)
-py$fit(model, data, 3L, opt, py$F$mse_loss)
-```
+## Model 3
+
+This model is a deep learning model with the following layers:
+
+1. Input - Concatenation of user embedding vector and movie embedding vector (size = `2*n_factors`)
+2. Dropout with dropout rate `p1=0.05`
+3. Linear fully connected layer with output size `nh = 10`
+4. Relu
+5. Dropout with dropout rate `p2=0.5`
+6. Linear fully connected layer with output size 1.
+7. Apply sigmoid function and scale to be between min and max rating
 
 ```{r}
 py_run_string("
@@ -207,17 +271,32 @@ class EmbeddingNet(nn.Module):
            ")
 ```
 
+Model is defined and fit.
 ```{r}
 wd=1e-5
 model = py$EmbeddingNet(n_users, n_movies, n_factors, min_rating, max_rating)$cuda()
 opt = py$optim$Adam(model$parameters(), 1e-3, weight_decay=wd)
 ```
 
-```{r}
-py$fit(model, data, 3L, opt, py$F$mse_loss)
+```{r results = "hide"}
+mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
 ```
-
+```{r}
+paste0("MSE of validation set = ", round(mdlfit[[1]], 3))
+```
+Learning rate is changed and model refit
 ```{r}
 py$set_lrs(opt, 0.01)
-py$fit(model, data, 3L, opt, py$F$mse_loss)
+mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
+```
+```{r}
+paste0("MSE of validation set = ", round(mdlfit[[1]], 3))
+```
+
+## Summary
+
+This shows how a model can be developed from scratch. But the model would need to be defined as python class. I am guessing if somebody is developing a model from scratch, it might be better to do it just in python and create wrapper functions which can then by used by R. 
+
+```{r}
+sessionInfo()
 ```
