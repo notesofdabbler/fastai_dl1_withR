@@ -18,7 +18,7 @@ It will be helpful to listen to the lectures before going through this notebook 
 library(reticulate)
 library(ggplot2)
 library(dplyr)
-
+library(irlba)
 ```
 
 In this course, they talk about several cloud GPU options and provided a conda environment fastai in those environments. I am using the Paperspace setup that is covered in [Lesson 1](http://course.fast.ai/lessons/lesson1.html). Reshama Shaik has also listed detailed upto date [instructions](https://github.com/reshamas/fastai_deeplearn_part1/blob/master/tools/paperspace.md) on getting set up in Paperspace. For setting up RStudio server in the same machine, I followed Cloud GPU [setup section](https://tensorflow.rstudio.com/tools/cloud_gpu.html) in TensorFlow for R site (except for the EC2 part).
@@ -120,7 +120,7 @@ The model has the following components:
 * Users have a bias vector `ub` of length `n_users = 671` and movies have a bias vector $ib$ of length `n_movies = 9066`. 
 
 Next we fit the model
-```{r message=FALSE}
+```{r results="hide"}
 # python code
 # learn.fit(1e-2, 2, wds=wd, cycle_len=1, cycle_mult=2)
 #
@@ -183,7 +183,7 @@ topmovies$movie_bias = movie_bias[,1]
 topmovies = left_join(topmovies, movies %>% select(movieId, title), by = "movieId")
 ```
 
-Find the lowest rated movies (lowest values of movie bias)
+Find the lowest rated movies (lowest values of movie bias). 
 ```{r}
 topmovies %>% arrange(movie_bias) %>% slice(1:15)
 ```
@@ -204,19 +204,14 @@ movie_emb = py$to_np(m$i(py$V(topmoviesidx)))
 dim(movie_emb)
 ```
 
-```{r}
-save(movie_emb, file = "movie_emb.Rda")
-rm(movie_emb)
-```
-
-Since there are 50 dimensions, a PCA is done to examine the first two dimensions. For some reason, using `movie_emb` directly crashes R. So I save it, delete it and reload it and that seems to work.
+Since there are 50 dimensions, a PCA is done to examine the first two principal components. 
 
 ```{r}
-load("movie_emb.Rda")
-pcamdl = prcomp(movie_emb)
+pcamdl = prcomp_irlba(movie_emb, n = 2)
 loadings_df = data.frame(pcamdl$rotation)
 scores_df = data.frame(pcamdl$x)
 ```
+
 
 ```{r}
 scores_df$movieidx = py_to_r(topmoviesidx)
@@ -248,7 +243,7 @@ ggplot(scores_df_samp) + geom_point(aes(x = PC1, y = PC2)) +
 
 ## Summary
 
-Reticulate package is a great addition to R. Working through this example showed that it is not too hard to develop a R version of the analysis in python thanks to reticulate.
+Reticulate package is a great addition to R. Working through this example showed that it is not too hard to develop a R version of the analysis in python thanks to reticulate.890opkl,m
 
 ```{r}
 sessionInfo()

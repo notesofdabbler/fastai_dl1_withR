@@ -75,7 +75,7 @@ a$mul(b)
 a$mul(b)$sum(1L) # note the use of 1L instead of 1 to ensure that we are passing integer
 ```
 
-In PyTorch, we need to define a model as a Python class that inherits from ``nn.Module``. It has a specific method `forward` which gives the recipe for computing the prediction given inputs. For example, if the prediction `r` is a dot product of input vectors `u` and `m`, then it would defined in the following class.
+In PyTorch, we need to define a model as a Python class that inherits from `nn.Module`. It has a specific method `forward` which gives the recipe for computing the prediction given inputs. For example, if the prediction `r` is a dot product of input vectors `u` and `m`, then it would be defined in the following class.
 ```{r}
 py_run_string("
 class DotProduct(nn.Module):
@@ -160,6 +160,10 @@ model = py$EmbeddingDot(n_users, n_movies, n_factors)$cuda()
 opt = py$optim$SGD(model$parameters(), 1e-1, weight_decay=wd, momentum=0.9)
 ```
 
+The model details are listed below
+```{r}
+model
+```
 Model is fit. In Jupyter notebook, a widget shows a nice output of progress. That output doesn't render properly within RStudio and the html generated document has too much output. For now, I have turned off output and am just storing the final validation loss metric (MSE loss in this case)
 ```{r results="hide"}
 mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
@@ -222,6 +226,11 @@ model = py$EmbeddingDotBias(n_users, n_movies, n_factors, min_rating, max_rating
 opt = py$optim$SGD(model$parameters(), 1e-1, weight_decay=wd, momentum=0.9)
 ```
 
+The model details are listed below
+```{r}
+model
+```
+
 ```{r results = "hide"}
 mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
 ```
@@ -278,6 +287,11 @@ model = py$EmbeddingNet(n_users, n_movies, n_factors, min_rating, max_rating)$cu
 opt = py$optim$Adam(model$parameters(), 1e-3, weight_decay=wd)
 ```
 
+The model details are listed below
+```{r}
+model
+```
+
 ```{r results = "hide"}
 mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
 ```
@@ -285,7 +299,7 @@ mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
 paste0("MSE of validation set = ", round(mdlfit[[1]], 3))
 ```
 Learning rate is changed and model refit
-```{r}
+```{r results="hide"}
 py$set_lrs(opt, 0.01)
 mdlfit = py$fit(model, data, 3L, opt, py$F$mse_loss)
 ```
